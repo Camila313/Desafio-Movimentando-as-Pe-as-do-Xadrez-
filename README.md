@@ -1,2 +1,654 @@
-# Desafio-Movimentando-as-Pe-as-do-Xadrez-
-O xadrez é um jogo de tabuleiro para dois jogadores, que simula uma batalha entre dois exércitos. O objetivo principal do jogo é dar xeque-mate no rei do oponente.
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xadrez vs Computador</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .game-container {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            max-width: 600px;
+        }
+        
+        .chessboard {
+            width: 480px;
+            height: 480px;
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            grid-template-rows: repeat(8, 1fr);
+            border: 3px solid #333;
+            margin: 20px auto;
+        }
+        
+        .square {
+            width: 60px;
+            height: 60px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 35px;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+        
+        .white {
+            background-color: #f0d9b5;
+        }
+        
+        .black {
+            background-color: #b58863;
+        }
+        
+        .selected {
+            box-shadow: inset 0 0 20px rgba(255, 255, 0, 0.7);
+            border: 2px solid #ffff00;
+        }
+        
+        .possible-move {
+            background-color: rgba(0, 255, 0, 0.3) !important;
+        }
+        
+        .capture {
+            background-color: rgba(255, 0, 0, 0.3) !important;
+        }
+        
+        .computer-thinking {
+            background-color: rgba(0, 0, 255, 0.2) !important;
+        }
+        
+        .game-info {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .current-player {
+            font-size: 18px;
+            font-weight: bold;
+            margin: 10px 0;
+            color: #333;
+        }
+        
+        .game-status {
+            font-size: 16px;
+            margin: 10px 0;
+            min-height: 20px;
+        }
+        
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin: 10px 0;
+        }
+        
+        .btn {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        .btn:hover {
+            background: #45a049;
+        }
+        
+        .btn:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+        
+        .difficulty {
+            margin: 10px 0;
+        }
+        
+        .difficulty select {
+            padding: 5px;
+            font-size: 16px;
+            border-radius: 3px;
+            border: 1px solid #ccc;
+        }
+        
+        .score {
+            display: flex;
+            justify-content: space-between;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        
+        .captured-pieces {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            min-height: 25px;
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="game-info">
+            <h1>♔ Xadrez vs Computador ♔</h1>
+            
+            <div class="difficulty">
+                <label>Dificuldade: </label>
+                <select id="difficulty">
+                    <option value="1">Fácil</option>
+                    <option value="2" selected>Médio</option>
+                    <option value="3">Difícil</option>
+                </select>
+            </div>
+            
+            <div class="score">
+                <div>🤖 Computador (Pretas)</div>
+                <div>👤 Você (Brancas)</div>
+            </div>
+            
+            <div class="captured-pieces" id="capturedByPlayer"></div>
+            <div class="captured-pieces" id="capturedByComputer"></div>
+            
+            <div class="current-player" id="currentPlayer">Sua vez!</div>
+            <div class="game-status" id="gameStatus"></div>
+            
+            <div class="controls">
+                <button class="btn" onclick="resetGame()">Novo Jogo</button>
+                <button class="btn" id="hintBtn" onclick="showHint()">Dica</button>
+            </div>
+        </div>
+        <div class="chessboard" id="chessboard"></div>
+    </div>
+
+    <script>
+        // Peças do xadrez em Unicode
+        const pieces = {
+            'wK': '♔', 'wQ': '♕', 'wR': '♖', 'wB': '♗', 'wN': '♘', 'wP': '♙',
+            'bK': '♚', 'bQ': '♛', 'bR': '♜', 'bB': '♝', 'bN': '♞', 'bP': '♟'
+        };
+
+        // Valores das peças para IA
+        const pieceValues = {
+            'P': 1, 'N': 3, 'B': 3, 'R': 5, 'Q': 9, 'K': 1000
+        };
+
+        // Estado inicial do tabuleiro
+        let board = [
+            ['bR', 'bN', 'bB', 'bQ', 'bK', 'bB', 'bN', 'bR'],
+            ['bP', 'bP', 'bP', 'bP', 'bP', 'bP', 'bP', 'bP'],
+            ['', '', '', '', '', '', '', ''],
+            ['', '', '', '', '', '', '', ''],
+            ['', '', '', '', '', '', '', ''],
+            ['', '', '', '', '', '', '', ''],
+            ['wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP'],
+            ['wR', 'wN', 'wB', 'wQ', 'wK', 'wB', 'wN', 'wR']
+        ];
+
+        let currentPlayer = 'w'; // Jogador sempre começa
+        let selectedSquare = null;
+        let gameActive = true;
+        let capturedByPlayer = [];
+        let capturedByComputer = [];
+        let computerThinking = false;
+
+        function createBoard() {
+            const chessboard = document.getElementById('chessboard');
+            chessboard.innerHTML = '';
+
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const square = document.createElement('div');
+                    square.className = `square ${(row + col) % 2 === 0 ? 'white' : 'black'}`;
+                    square.dataset.row = row;
+                    square.dataset.col = col;
+                    square.innerHTML = board[row][col] ? pieces[board[row][col]] : '';
+                    square.addEventListener('click', handleSquareClick);
+                    chessboard.appendChild(square);
+                }
+            }
+            updateCapturedPieces();
+        }
+
+        function handleSquareClick(event) {
+            if (!gameActive || computerThinking || currentPlayer !== 'w') return;
+
+            const row = parseInt(event.target.dataset.row);
+            const col = parseInt(event.target.dataset.col);
+            const piece = board[row][col];
+
+            // Se já há uma peça selecionada
+            if (selectedSquare) {
+                const [selectedRow, selectedCol] = selectedSquare;
+                
+                // Se clicou na mesma casa, desseleciona
+                if (row === selectedRow && col === selectedCol) {
+                    clearSelection();
+                    return;
+                }
+
+                // Se é um movimento válido
+                if (isValidMove(selectedRow, selectedCol, row, col)) {
+                    const capturedPiece = board[row][col];
+                    if (capturedPiece) {
+                        capturedByPlayer.push(capturedPiece);
+                    }
+                    
+                    movePiece(selectedRow, selectedCol, row, col);
+                    clearSelection();
+                    
+                    if (isCheckmate('b')) {
+                        endGame('Você venceu! Parabéns!');
+                        return;
+                    }
+                    
+                    switchToComputer();
+                    return;
+                }
+                
+                clearSelection();
+            }
+
+            // Se clicou em uma peça branca (do jogador)
+            if (piece && piece[0] === 'w') {
+                selectedSquare = [row, col];
+                highlightSquare(row, col);
+                showPossibleMoves(row, col);
+            }
+        }
+
+        function switchToComputer() {
+            currentPlayer = 'b';
+            computerThinking = true;
+            updateDisplay();
+            document.getElementById('gameStatus').textContent = '🤖 Computador pensando...';
+            
+            // Adicionar delay para simular pensamento
+            setTimeout(() => {
+                makeComputerMove();
+            }, 500 + Math.random() * 1500);
+        }
+
+        function makeComputerMove() {
+            const difficulty = parseInt(document.getElementById('difficulty').value);
+            const move = getBestMove('b', difficulty);
+            
+            if (move) {
+                const capturedPiece = board[move.toRow][move.toCol];
+                if (capturedPiece) {
+                    capturedByComputer.push(capturedPiece);
+                }
+                
+                movePiece(move.fromRow, move.fromCol, move.toRow, move.toCol);
+                
+                // Destacar movimento do computador
+                highlightComputerMove(move.fromRow, move.fromCol, move.toRow, move.toCol);
+                
+                if (isCheckmate('w')) {
+                    endGame('Computador venceu! Tente novamente.');
+                    return;
+                }
+            }
+            
+            currentPlayer = 'w';
+            computerThinking = false;
+            updateDisplay();
+        }
+
+        function getBestMove(color, difficulty) {
+            const moves = getAllValidMoves(color);
+            if (moves.length === 0) return null;
+
+            if (difficulty === 1) {
+                // Fácil: movimento aleatório
+                return moves[Math.floor(Math.random() * moves.length)];
+            } else if (difficulty === 2) {
+                // Médio: avalia capturas e ameaças
+                return getBestMoveIntermediate(moves, color);
+            } else {
+                // Difícil: minimax simples
+                return getBestMoveMinimax(moves, color, 2);
+            }
+        }
+
+        function getBestMoveIntermediate(moves, color) {
+            let bestMove = null;
+            let bestScore = -Infinity;
+
+            for (const move of moves) {
+                let score = 0;
+                const capturedPiece = board[move.toRow][move.toCol];
+                
+                // Priorizar capturas
+                if (capturedPiece) {
+                    score += pieceValues[capturedPiece[1]] * 10;
+                }
+                
+                // Avaliar posição central
+                const centerDistance = Math.abs(3.5 - move.toRow) + Math.abs(3.5 - move.toCol);
+                score += (7 - centerDistance) * 0.1;
+                
+                // Adicionar aleatoriedade
+                score += Math.random() * 2;
+                
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestMove = move;
+                }
+            }
+
+            return bestMove;
+        }
+
+        function getBestMoveMinimax(moves, color, depth) {
+            let bestMove = null;
+            let bestScore = color === 'b' ? -Infinity : Infinity;
+
+            for (const move of moves) {
+                const capturedPiece = board[move.toRow][move.toCol];
+                movePiece(move.fromRow, move.fromCol, move.toRow, move.toCol);
+                
+                const score = minimax(depth - 1, color === 'b' ? 'w' : 'b', -Infinity, Infinity);
+                
+                // Desfazer movimento
+                board[move.fromRow][move.fromCol] = board[move.toRow][move.toCol];
+                board[move.toRow][move.toCol] = capturedPiece || '';
+                
+                if ((color === 'b' && score > bestScore) || (color === 'w' && score < bestScore)) {
+                    bestScore = score;
+                    bestMove = move;
+                }
+            }
+
+            return bestMove;
+        }
+
+        function minimax(depth, color, alpha, beta) {
+            if (depth === 0) {
+                return evaluateBoard();
+            }
+
+            const moves = getAllValidMoves(color);
+            if (moves.length === 0) {
+                return color === 'b' ? -1000 : 1000;
+            }
+
+            if (color === 'b') {
+                let maxEval = -Infinity;
+                for (const move of moves) {
+                    const capturedPiece = board[move.toRow][move.toCol];
+                    movePiece(move.fromRow, move.fromCol, move.toRow, move.toCol);
+                    
+                    const eval = minimax(depth - 1, 'w', alpha, beta);
+                    
+                    board[move.fromRow][move.fromCol] = board[move.toRow][move.toCol];
+                    board[move.toRow][move.toCol] = capturedPiece || '';
+                    
+                    maxEval = Math.max(maxEval, eval);
+                    alpha = Math.max(alpha, eval);
+                    if (beta <= alpha) break;
+                }
+                return maxEval;
+            } else {
+                let minEval = Infinity;
+                for (const move of moves) {
+                    const capturedPiece = board[move.toRow][move.toCol];
+                    movePiece(move.fromRow, move.fromCol, move.toRow, move.toCol);
+                    
+                    const eval = minimax(depth - 1, 'b', alpha, beta);
+                    
+                    board[move.fromRow][move.fromCol] = board[move.toRow][move.toCol];
+                    board[move.toRow][move.toCol] = capturedPiece || '';
+                    
+                    minEval = Math.min(minEval, eval);
+                    beta = Math.min(beta, eval);
+                    if (beta <= alpha) break;
+                }
+                return minEval;
+            }
+        }
+
+        function evaluateBoard() {
+            let score = 0;
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const piece = board[row][col];
+                    if (piece) {
+                        const value = pieceValues[piece[1]];
+                        score += piece[0] === 'w' ? -value : value;
+                    }
+                }
+            }
+            return score;
+        }
+
+        function getAllValidMoves(color) {
+            const moves = [];
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const piece = board[row][col];
+                    if (piece && piece[0] === color) {
+                        for (let toRow = 0; toRow < 8; toRow++) {
+                            for (let toCol = 0; toCol < 8; toCol++) {
+                                if (isValidMove(row, col, toRow, toCol)) {
+                                    moves.push({ fromRow: row, fromCol: col, toRow, toCol });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return moves;
+        }
+
+        function highlightComputerMove(fromRow, fromCol, toRow, toCol) {
+            setTimeout(() => {
+                const fromSquare = document.querySelector(`[data-row="${fromRow}"][data-col="${fromCol}"]`);
+                const toSquare = document.querySelector(`[data-row="${toRow}"][data-col="${toCol}"]`);
+                fromSquare.classList.add('computer-thinking');
+                toSquare.classList.add('computer-thinking');
+                
+                setTimeout(() => {
+                    fromSquare.classList.remove('computer-thinking');
+                    toSquare.classList.remove('computer-thinking');
+                }, 1000);
+            }, 100);
+        }
+
+        function showHint() {
+            if (currentPlayer !== 'w' || computerThinking || !gameActive) return;
+            
+            const move = getBestMove('w', 3);
+            if (move) {
+                const fromSquare = document.querySelector(`[data-row="${move.fromRow}"][data-col="${move.fromCol}"]`);
+                const toSquare = document.querySelector(`[data-row="${move.toRow}"][data-col="${move.toCol}"]`);
+                
+                fromSquare.style.border = '3px solid #00ff00';
+                toSquare.style.border = '3px solid #00ff00';
+                
+                setTimeout(() => {
+                    fromSquare.style.border = '';
+                    toSquare.style.border = '';
+                }, 2000);
+            }
+        }
+
+        function isCheckmate(color) {
+            return getAllValidMoves(color).length === 0;
+        }
+
+        function endGame(message) {
+            gameActive = false;
+            document.getElementById('gameStatus').textContent = message;
+            document.getElementById('currentPlayer').textContent = 'Jogo finalizado';
+        }
+
+        function updateCapturedPieces() {
+            document.getElementById('capturedByPlayer').innerHTML = 
+                capturedByPlayer.map(piece => pieces[piece]).join(' ');
+            document.getElementById('capturedByComputer').innerHTML = 
+                capturedByComputer.map(piece => pieces[piece]).join(' ');
+        }
+
+        // Reutilizar funções do jogo anterior (isValidMove, movePiece, etc.)
+        function isValidMove(fromRow, fromCol, toRow, toCol) {
+            const piece = board[fromRow][fromCol];
+            const targetPiece = board[toRow][toCol];
+            
+            if (targetPiece && targetPiece[0] === piece[0]) return false;
+
+            const pieceType = piece[1];
+            const rowDiff = toRow - fromRow;
+            const colDiff = toCol - fromCol;
+
+            switch (pieceType) {
+                case 'P': return isValidPawnMove(fromRow, fromCol, toRow, toCol, piece[0]);
+                case 'R': return isValidRookMove(fromRow, fromCol, toRow, toCol);
+                case 'N': return isValidKnightMove(rowDiff, colDiff);
+                case 'B': return isValidBishopMove(fromRow, fromCol, toRow, toCol);
+                case 'Q': return isValidQueenMove(fromRow, fromCol, toRow, toCol);
+                case 'K': return isValidKingMove(rowDiff, colDiff);
+                default: return false;
+            }
+        }
+
+        function isValidPawnMove(fromRow, fromCol, toRow, toCol, color) {
+            const direction = color === 'w' ? -1 : 1;
+            const startRow = color === 'w' ? 6 : 1;
+            const rowDiff = toRow - fromRow;
+            const colDiff = Math.abs(toCol - fromCol);
+
+            if (colDiff === 0) {
+                if (board[toRow][toCol] !== '') return false;
+                if (rowDiff === direction) return true;
+                if (fromRow === startRow && rowDiff === 2 * direction) return true;
+            }
+            
+            if (colDiff === 1 && rowDiff === direction) {
+                return board[toRow][toCol] !== '';
+            }
+
+            return false;
+        }
+
+        function isValidRookMove(fromRow, fromCol, toRow, toCol) {
+            if (fromRow !== toRow && fromCol !== toCol) return false;
+            return isPathClear(fromRow, fromCol, toRow, toCol);
+        }
+
+        function isValidKnightMove(rowDiff, colDiff) {
+            return (Math.abs(rowDiff) === 2 && Math.abs(colDiff) === 1) ||
+                   (Math.abs(rowDiff) === 1 && Math.abs(colDiff) === 2);
+        }
+
+        function isValidBishopMove(fromRow, fromCol, toRow, toCol) {
+            if (Math.abs(toRow - fromRow) !== Math.abs(toCol - fromCol)) return false;
+            return isPathClear(fromRow, fromCol, toRow, toCol);
+        }
+
+        function isValidQueenMove(fromRow, fromCol, toRow, toCol) {
+            return isValidRookMove(fromRow, fromCol, toRow, toCol) ||
+                   isValidBishopMove(fromRow, fromCol, toRow, toCol);
+        }
+
+        function isValidKingMove(rowDiff, colDiff) {
+            return Math.abs(rowDiff) <= 1 && Math.abs(colDiff) <= 1;
+        }
+
+        function isPathClear(fromRow, fromCol, toRow, toCol) {
+            const rowStep = toRow > fromRow ? 1 : toRow < fromRow ? -1 : 0;
+            const colStep = toCol > fromCol ? 1 : toCol < fromCol ? -1 : 0;
+            
+            let currentRow = fromRow + rowStep;
+            let currentCol = fromCol + colStep;
+            
+            while (currentRow !== toRow || currentCol !== toCol) {
+                if (board[currentRow][currentCol] !== '') return false;
+                currentRow += rowStep;
+                currentCol += colStep;
+            }
+            
+            return true;
+        }
+
+        function movePiece(fromRow, fromCol, toRow, toCol) {
+            board[toRow][toCol] = board[fromRow][fromCol];
+            board[fromRow][fromCol] = '';
+        }
+
+        function highlightSquare(row, col) {
+            const square = document.querySelector(`[data-row="${row}"][data-col="${col}"]`);
+            square.classList.add('selected');
+        }
+
+        function showPossibleMoves(row, col) {
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    if (isValidMove(row, col, r, c)) {
+                        const square = document.querySelector(`[data-row="${r}"][data-col="${c}"]`);
+                        if (board[r][c] !== '') {
+                            square.classList.add('capture');
+                        } else {
+                            square.classList.add('possible-move');
+                        }
+                    }
+                }
+            }
+        }
+
+        function clearSelection() {
+            selectedSquare = null;
+            document.querySelectorAll('.square').forEach(square => {
+                square.classList.remove('selected', 'possible-move', 'capture');
+            });
+        }
+
+        function updateDisplay() {
+            if (gameActive) {
+                document.getElementById('currentPlayer').textContent = 
+                    currentPlayer === 'w' ? 'Sua vez!' : 'Vez do computador';
+                document.getElementById('gameStatus').textContent = 
+                    computerThinking ? '🤖 Computador pensando...' : '';
+            }
+            createBoard();
+        }
+
+        function resetGame() {
+            board = [
+                ['bR', 'bN', 'bB', 'bQ', 'bK', 'bB', 'bN', 'bR'],
+                ['bP', 'bP', 'bP', 'bP', 'bP', 'bP', 'bP', 'bP'],
+                ['', '', '', '', '', '', '', ''],
+                ['', '', '', '', '', '', '', ''],
+                ['', '', '', '', '', '', '', ''],
+                ['', '', '', '', '', '', '', ''],
+                ['wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP'],
+                ['wR', 'wN', 'wB', 'wQ', 'wK', 'wB', 'wN', 'wR']
+            ];
+            currentPlayer = 'w';
+            gameActive = true;
+            computerThinking = false;
+            capturedByPlayer = [];
+            capturedByComputer = [];
+            clearSelection();
+            updateDisplay();
+        }
+
+        // Inicializar o jogo
+        createBoard();
+    </script>
+</body>
+</html>
